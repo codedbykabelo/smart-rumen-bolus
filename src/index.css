@@ -192,3 +192,69 @@ button:focus-visible, select:focus-visible, input:focus-visible, tr:focus-visibl
   box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
 }
 .recharts-tooltip-label { color: #ededed !important; }
+
+/* Click feedback and touch-friendly controls, without changing their handlers. */
+button:not(:disabled), select:not(:disabled), a[href],
+input[type="checkbox"]:not(:disabled), label:has(input[type="checkbox"]:not(:disabled)),
+[role="button"]:not([aria-disabled="true"]), tr[tabindex="0"] {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:disabled, select:disabled, [aria-disabled="true"] { cursor: not-allowed; }
+button, select { min-height: 44px; }
+button { -webkit-tap-highlight-color: rgb(255 255 255 / 12%); }
+input[type="checkbox"] { width: 18px; height: 18px; flex-shrink: 0; }
+label:has(input[type="checkbox"]) { min-height: 44px; }
+
+/* Allow nested panels to shrink while tables retain their own horizontal scroll. */
+main .grid > *, main section, .recharts-responsive-container { min-width: 0; }
+main .overflow-x-auto {
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #686868 #141414;
+}
+main section p, main footer { overflow-wrap: anywhere; }
+select { max-width: 100%; }
+
+@media (max-width: 639px) {
+  header > div { gap: 12px; }
+  header > div > div:last-child { margin-left: auto; }
+  header nav { overflow: visible; }
+  header nav > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+  }
+  header nav button { white-space: normal; line-height: 1.35; padding: 10px 8px; }
+  main { padding-top: 16px; }
+  main section[class*="rounded-2xl"] { padding: 14px; }
+  main section[class~="p-0"] { padding: 0; }
+  main [aria-label="Shared live cow summary"] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  main [aria-label="Shared live cow summary"] > div { padding: 12px; }
+  main [aria-label="Shared live cow summary"] .truncate { white-space: normal; overflow: visible; }
+  main h2 { font-size: 1.25rem; line-height: 1.4; }
+  main section > .flex { flex-wrap: wrap; }
+  main section > .flex > div { min-width: 0; }
+  /* Keep the view switch, stomach toggle and bottom captions clear of the cow. */
+  main div:has(> [aria-label="Cow view"]) { height: clamp(400px, 60svh, 520px); min-height: 400px; }
+  [aria-label="Cow view"] { max-width: calc(100% - 24px); }
+  [aria-label="Cow view"] button { padding-inline: 10px; }
+  main div:has(> [aria-label="Cow view"]) > label { top: 76px; }
+  main div:has(> [aria-label="Cow view"]) > [role="status"] { max-width: calc(100% - 24px); }
+}
+
+@media (min-width: 640px) and (max-width: 1279px) {
+  /* Tablets can show two scanner cards comfortably; the last card spans the row. */
+  main [class~="xl:grid-cols-3"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  main [class~="xl:grid-cols-3"] > :last-child { grid-column: 1 / -1; }
+}
+
+@media (max-height: 500px) and (max-width: 1023px) {
+  header { position: static; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button, select, tr { transition: none; }
+  .scanner-signal, .temperature-glow { animation: none; }
+}
