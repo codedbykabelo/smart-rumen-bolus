@@ -2,10 +2,9 @@ import type { Activity, AlertItem, CowProfile, ScenarioType } from '../types';
 
 export const appPages = [
   'Live Cow Simulation',
-  'Bolus Sensor Monitoring',
-  'AI Health Analysis',
+  'Scanners',
+  'Smart Health Analysis Model',
   'Farmer Dashboard',
-  'Outbreak Monitoring',
 ] as const;
 
 export const cowId = 'COW-008';

@@ -1,12 +1,17 @@
-import { Environment, Html, OrbitControls, useAnimations, useGLTF, useTexture } from '@react-three/drei';
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Environment, OrbitControls, useAnimations, useGLTF, useTexture } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
+import { Component, Suspense, useEffect, useMemo, useRef } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import type { Activity } from '../types';
+import { cowModelUrl } from '../data/cowAsset';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import {
   Box3,
   ConeGeometry,
   Group,
   LoopRepeat,
+  MathUtils,
   Mesh,
   MeshStandardMaterial,
   Object3D,
@@ -15,24 +20,85 @@ import {
   Vector3,
 } from 'three';
 
-const COW_MODEL_URL = '/models/holstein-cow.glb';
 const activityClipPatterns: Partial<Record<Activity, RegExp[]>> = {
   Grazing: [/graze/i, /eat/i, /feed/i],
   Walking: [/walk/i],
   Ruminating: [/ruminat/i, /chew/i, /eat/i],
   Drinking: [/drink/i, /head.?low/i],
-  Resting: [/idle/i, /stand/i, /rest/i],
+  Resting: [/look.?around/i, /idle/i, /stand/i, /rest/i],
+  'Looking around': [/look.?around/i, /idle/i],
   'Lying down': [/lie.?down/i, /lying/i],
 };
 
-interface CowPastureProps {
-  xRayView: boolean;
-  showBolus: boolean;
-  activity: Activity;
-  onBolusClick: () => void;
+function getMissingActivityClips(clipNames: readonly string[]): Activity[] {
+  return (Object.entries(activityClipPatterns) as Array<[Activity, RegExp[]]>)
+    .filter(([, patterns]) => !clipNames.some((name) => patterns.some((pattern) => pattern.test(name))))
+    .map(([activity]) => activity);
 }
 
-export function CowPasture({ xRayView, showBolus, activity, onBolusClick }: CowPastureProps) {
+export interface CowAnimationReport {
+  clipNames: string[];
+  missingActivities: Activity[];
+}
+
+interface CowPastureProps {
+  cowAssetAvailable: boolean;
+  onCowModelError: () => void;
+  xRayView: boolean;
+  activity: Activity;
+  illnessStage: 'Normal' | 'Early warning' | 'Urgent veterinary warning';
+  isInspectingBolus: boolean;
+  onAnimationReport: (report: CowAnimationReport) => void;
+}
+
+export function CowPasture({
+  cowAssetAvailable,
+  onCowModelError,
+  xRayView,
+  activity,
+  illnessStage,
+  isInspectingBolus,
+  onAnimationReport,
+}: CowPastureProps) {
+  const controls = useRef<OrbitControlsImpl>(null);
+  const focusTarget = useMemo(() => new Vector3(), []);
+  const normalCamera = useMemo(() => new Vector3(0, 2.9, 7.4), []);
+  const xRayCamera = useMemo(() => new Vector3(0, 2.55, 7.2), []);
+  const inspectCamera = useMemo(() => new Vector3(0, 1.9, 5.4), []);
+  const desiredCamera = useMemo(() => new Vector3(), []);
+  const focusTransitionActive = useRef(false);
+
+  useEffect(() => {
+    const inspectionView = isInspectingBolus;
+    const xRaySideView = xRayView || isInspectingBolus;
+    focusTarget.set(0, inspectionView ? 1.08 : xRaySideView ? 1.25 : 1.2, 0);
+    desiredCamera.copy(inspectionView ? inspectCamera : xRaySideView ? xRayCamera : normalCamera);
+    focusTransitionActive.current = true;
+  }, [desiredCamera, focusTarget, inspectCamera, isInspectingBolus, normalCamera, xRayCamera, xRayView]);
+
+  useFrame(({ camera }, delta) => {
+    if (!focusTransitionActive.current) return;
+    const blend = 1 - Math.exp(-delta * 3);
+    camera.position.lerp(desiredCamera, blend);
+    if (controls.current) {
+      controls.current.target.lerp(focusTarget, blend);
+      controls.current.update();
+    } else {
+      camera.lookAt(focusTarget);
+    }
+    const targetDistance = controls.current
+      ? controls.current.target.distanceToSquared(focusTarget)
+      : camera.position.distanceToSquared(desiredCamera);
+    if (camera.position.distanceToSquared(desiredCamera) < 0.0004 && targetDistance < 0.0004) {
+      camera.position.copy(desiredCamera);
+      if (controls.current) {
+        controls.current.target.copy(focusTarget);
+        controls.current.update();
+      }
+      focusTransitionActive.current = false;
+    }
+  });
+
   return (
     <>
       <color attach="background" args={['#8ec8ed']} />
@@ -68,18 +134,26 @@ export function CowPasture({ xRayView, showBolus, activity, onBolusClick }: CowP
       <Bush position={[-2.9, 0, -3.4]} />
       <Bush position={[3.3, 0, -3.05]} />
       <WaterTrough position={[2.1, 0, 0.65]} />
-      <CowAssetGate
-        xRayView={xRayView}
-        showBolus={showBolus}
-        activity={activity}
-        onBolusClick={onBolusClick}
-      />
+      {cowAssetAvailable && (
+        <CowModelErrorBoundary onError={onCowModelError}>
+          <Suspense fallback={null}>
+            <CowModel
+              activity={activity}
+              illnessStage={illnessStage}
+              xRayView={xRayView}
+              isInspectingBolus={isInspectingBolus}
+              onAnimationReport={onAnimationReport}
+            />
+          </Suspense>
+        </CowModelErrorBoundary>
+      )}
 
       <OrbitControls
+        ref={controls}
         makeDefault
-        target={[0, 1, 0]}
-        minDistance={4.2}
-        maxDistance={16}
+        target={[0, 1.2, 0]}
+        minDistance={4}
+        maxDistance={14}
         minPolarAngle={0.2}
         maxPolarAngle={Math.PI / 2.03}
         enableDamping
@@ -89,51 +163,73 @@ export function CowPasture({ xRayView, showBolus, activity, onBolusClick }: CowP
   );
 }
 
-function CowAssetGate(props: CowPastureProps) {
-  const [assetState, setAssetState] = useState<'checking' | 'ready' | 'missing'>('checking');
+class CowModelErrorBoundary extends Component<
+  { children: ReactNode; onError: () => void },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch(COW_MODEL_URL, { method: 'HEAD' })
-      .then((response) => {
-        const type = response.headers.get('content-type') ?? '';
-        if (!response.ok || type.includes('text/html')) {
-          throw new Error('The Holstein GLB is not installed in public/models.');
-        }
-        if (!cancelled) setAssetState('ready');
-      })
-      .catch(() => {
-        if (!cancelled) setAssetState('missing');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
 
-  if (assetState !== 'ready') return null;
+  componentDidCatch(_error: Error, _info: ErrorInfo) {
+    this.props.onError();
+  }
 
-  return (
-    <Suspense
-      fallback={
-        <Html position={[0, 1.1, 0]} center distanceFactor={9}>
-          <div className="scene-asset-status"><strong>Loading Holstein cow…</strong></div>
-        </Html>
-      }
-    >
-      <CowModel {...props} />
-    </Suspense>
-  );
+  render() {
+    return this.state.hasError ? null : this.props.children;
+  }
 }
 
-function CowModel({ xRayView, showBolus, activity, onBolusClick }: CowPastureProps) {
+function CowModel({
+  activity,
+  illnessStage,
+  xRayView,
+  isInspectingBolus,
+  onAnimationReport,
+}: {
+  activity: Activity;
+  illnessStage: 'Normal' | 'Early warning' | 'Urgent veterinary warning';
+  xRayView: boolean;
+  isInspectingBolus: boolean;
+  onAnimationReport: (report: CowAnimationReport) => void;
+}) {
   const root = useRef<Group>(null);
-  const { scene, animations } = useGLTF(COW_MODEL_URL);
+  const { scene, animations } = useGLTF(cowModelUrl);
   const cowScene = useMemo(() => clone(scene), [scene]);
   const bounds = useMemo(() => new Box3().setFromObject(cowScene), [cowScene]);
   const size = useMemo(() => bounds.getSize(new Vector3()), [bounds]);
   const center = useMemo(() => bounds.getCenter(new Vector3()), [bounds]);
-  const scale = 2.5 / Math.max(size.y, 0.001);
+  const horizontalSize = Math.max(size.x, size.z, 0.001);
+  const scale = 4.2 / horizontalSize;
+  const rotationY = size.z > size.x ? Math.PI / 2 : 0;
   const { actions } = useAnimations(animations, root);
+  const moveClock = useRef(0);
+
+  useFrame((_, delta) => {
+    if (!root.current) return;
+    const walking = activity === 'Walking' && !xRayView && !isInspectingBolus;
+    const drinking = activity === 'Drinking' && !xRayView && !isInspectingBolus;
+    const destinationX = walking ? Math.sin(moveClock.current * 0.16) * 1.15 : drinking ? 1.15 : 0;
+    const destinationZ = walking ? Math.cos(moveClock.current * 0.16) * 0.34 : drinking ? 0.65 : 0;
+    let destinationRotation = Math.PI / 2;
+    if (walking) {
+      moveClock.current += delta;
+      destinationRotation = Math.atan2(
+        1.15 * 0.16 * Math.cos(moveClock.current * 0.16),
+        -0.34 * 0.16 * Math.sin(moveClock.current * 0.16),
+      );
+    }
+    root.current.position.x = MathUtils.damp(root.current.position.x, destinationX, 1.3, delta);
+    root.current.position.z = MathUtils.damp(root.current.position.z, destinationZ, 1.3, delta);
+    root.current.rotation.y = MathUtils.damp(root.current.rotation.y, destinationRotation, 1.2, delta);
+  });
+
+  useEffect(() => {
+    const clipNames = animations.map((animation) => animation.name);
+    onAnimationReport({ clipNames, missingActivities: getMissingActivityClips(clipNames) });
+  }, [animations, onAnimationReport]);
 
   useEffect(() => {
     cowScene.traverse((object) => {
@@ -163,7 +259,7 @@ function CowModel({ xRayView, showBolus, activity, onBolusClick }: CowPasturePro
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       materials.forEach((material) => {
         material.transparent = xRayView;
-        material.opacity = xRayView ? 0.24 : 1;
+        material.opacity = xRayView ? 0.5 : 1;
         material.depthWrite = !xRayView;
         material.needsUpdate = true;
       });
@@ -174,7 +270,12 @@ function CowModel({ xRayView, showBolus, activity, onBolusClick }: CowPasturePro
     Object.values(actions).forEach((action) => action?.fadeOut(0.2));
     const patterns = activityClipPatterns[activity];
     if (!patterns) return;
-    const clip = animations.find((candidate) => patterns.some((pattern) => pattern.test(candidate.name)));
+    const clip = (illnessStage === 'Urgent veterinary warning'
+      ? animations.find((candidate) => candidate.name.toLowerCase() === 'alert')
+      : undefined) ?? patterns
+      .map((pattern) => animations.find((candidate) => pattern.test(candidate.name)))
+      .find((candidate) => candidate !== undefined)
+      ?? (activity === 'Drinking' ? animations.find((candidate) => candidate.name.toLowerCase() === 'idle') : undefined);
     if (!clip) return;
 
     const action = actions[clip.name];
@@ -187,53 +288,19 @@ function CowModel({ xRayView, showBolus, activity, onBolusClick }: CowPasturePro
     return () => {
       action.fadeOut(0.2);
     };
-  }, [actions, activity, animations]);
+  }, [actions, activity, animations, illnessStage]);
+
+  useEffect(() => {
+    Object.values(actions).forEach((action) => {
+      if (action) action.paused = xRayView || isInspectingBolus;
+    });
+  }, [actions, activity, isInspectingBolus, xRayView]);
 
   return (
-    <group ref={root} position={[0, 0, 0]}>
-      <group scale={scale} position={[-center.x, -bounds.min.y, -center.z]}>
+    <group ref={root} rotation-y={rotationY} scale={scale}>
+      <group position={[-center.x, -bounds.min.y, -center.z]}>
         <primitive object={cowScene} />
       </group>
-      {animations.length === 0 && (
-        <Html position={[0, 2.75, 0]} center distanceFactor={9} pointerEvents="none">
-          <span className="scene-label">Static model · no skeletal animation</span>
-        </Html>
-      )}
-      {xRayView && (
-        <group position={[0.05, 0.95, -0.12]}>
-          <mesh position={[-0.3, 0.02, 0]}>
-            <sphereGeometry args={[0.53, 28, 20]} />
-            <meshStandardMaterial color="#65ad7a" emissive="#173d24" emissiveIntensity={0.25} transparent opacity={0.75} roughness={0.5} />
-          </mesh>
-          <mesh position={[0.19, -0.19, 0.03]}>
-            <sphereGeometry args={[0.24, 24, 18]} />
-            <meshStandardMaterial color="#a9d6f3" emissive="#14374e" emissiveIntensity={0.2} transparent opacity={0.84} roughness={0.4} />
-          </mesh>
-          <Html position={[-0.42, 0.67, 0.05]} center distanceFactor={9} pointerEvents="none">
-            <span className="scene-label">Rumen</span>
-          </Html>
-          <Html position={[0.38, 0.17, 0.12]} center distanceFactor={9} pointerEvents="none">
-            <span className="scene-label">Reticulum</span>
-          </Html>
-          {showBolus && (
-            <group position={[0.32, -0.16, 0.25]}>
-              <mesh
-                rotation={[0.25, 0.2, Math.PI / 2]}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onBolusClick();
-                }}
-              >
-                <capsuleGeometry args={[0.06, 0.18, 8, 16]} />
-                <meshStandardMaterial color="#31d4a1" emissive="#087f68" emissiveIntensity={0.8} metalness={0.25} roughness={0.3} />
-              </mesh>
-              <Html position={[0.05, 0.2, 0.05]} center distanceFactor={8} pointerEvents="none">
-                <span className="scene-label scene-label-bolus">Smart Bolus</span>
-              </Html>
-            </group>
-          )}
-        </group>
-      )}
     </group>
   );
 }

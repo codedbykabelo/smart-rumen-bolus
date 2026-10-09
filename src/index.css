@@ -55,3 +55,30 @@ input {
   border-color: rgb(45 212 191 / 65%);
   color: #99f6e4;
 }
+
+.scanner-signal {
+  stroke-dasharray: 7 4;
+  animation: scanner-sweep 3s linear infinite;
+}
+
+.temperature-glow {
+  background:
+    radial-gradient(ellipse at 18% 80%, rgb(14 165 233 / 54%), transparent 35%),
+    radial-gradient(ellipse at 40% 15%, rgb(74 222 128 / 30%), transparent 40%),
+    radial-gradient(ellipse at 76% 80%, rgb(249 115 22 / 45%), transparent 43%),
+    radial-gradient(ellipse at 95% 25%, rgb(244 63 94 / 36%), transparent 32%);
+  animation: temperature-drift 7s ease-in-out infinite alternate;
+}
+
+@keyframes scanner-sweep {
+  to {
+    stroke-dashoffset: -44;
+  }
+}
+
+@keyframes temperature-drift {
+  to {
+    transform: scale(1.12) translateX(2%);
+    filter: hue-rotate(8deg);
+  }
+}

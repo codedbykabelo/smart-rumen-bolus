@@ -1,4 +1,4 @@
-export type Activity = 'Grazing' | 'Walking' | 'Ruminating' | 'Drinking' | 'Resting' | 'Lying down';
+export type Activity = 'Grazing' | 'Walking' | 'Ruminating' | 'Drinking' | 'Resting' | 'Lying down' | 'Looking around';
 export type ScenarioType = 'normal' | 'fmd' | 'heartwater' | 'redwater' | 'acidosis';
 export type HealthStatus = 'Healthy' | 'Monitoring' | 'Attention' | 'Urgent';
 export type AlertType = 'info' | 'warning' | 'urgent';
