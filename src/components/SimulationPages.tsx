@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { CowPicture } from './CowPicture';
 import {
   Activity,
   ArrowDownRight,
@@ -84,6 +86,8 @@ export function LiveSimulationPage({
   onAnimationReport: (report: CowAnimationReport) => void;
   onSelectCow: (cowId: string) => void;
 }) {
+  const [cowView, setCowView] = useState<'3d' | 'picture'>('3d');
+  const [transparentStomach, setTransparentStomach] = useState(true);
   const reading = getLatestCowReading(cow);
   const assessment = getCowHealthAnalysis(cow);
   return (
@@ -105,10 +109,22 @@ export function LiveSimulationPage({
             >
               {cows.map((item) => <option key={item.id} value={item.id}>{item.id} · {item.tag}</option>)}
             </select>
-            <span className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-xs font-semibold text-amber-100">3D DIGESTIVE ASSET REQUIRED</span>
+            <span className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-xs font-semibold text-amber-100">{cowView === '3d' ? '3D DIGESTIVE ASSET REQUIRED' : 'EDUCATIONAL CUTAWAY'}</span>
           </div>
         </div>
         <div className="relative h-[min(67vh,620px)] min-h-[380px] overflow-hidden rounded-xl border border-slate-700 bg-slate-950">
+          <div className="absolute left-3 top-3 z-10 flex gap-1 rounded-lg border border-slate-700 bg-slate-950/90 p-1 text-[10px] backdrop-blur" role="group" aria-label="Cow view">
+            <button type="button" aria-pressed={cowView === '3d'} onClick={() => setCowView('3d')} className={`rounded-md px-2.5 py-1.5 font-semibold transition ${cowView === '3d' ? 'bg-emerald-400/15 text-emerald-100' : 'text-slate-400 hover:text-white'}`}>Animated 3D</button>
+            <button type="button" aria-pressed={cowView === 'picture'} onClick={() => setCowView('picture')} className={`rounded-md px-2.5 py-1.5 font-semibold transition ${cowView === 'picture' ? 'bg-emerald-400/15 text-emerald-100' : 'text-slate-400 hover:text-white'}`}>Realistic picture</button>
+          </div>
+          {cowView === 'picture' ? <>
+            <CowPicture transparentStomach={transparentStomach} />
+            <label className="absolute right-3 top-14 z-10 flex items-center gap-2 sm:top-3 rounded-lg border border-slate-700 bg-slate-950/90 px-2.5 py-2 text-[10px] text-emerald-100 backdrop-blur">
+              <input type="checkbox" checked={transparentStomach} onChange={(event) => setTransparentStomach(event.target.checked)} className="accent-emerald-400" />
+              Transparent stomach
+            </label>
+            <div className="absolute bottom-12 right-3 max-w-[min(340px,70%)] rounded-lg border border-amber-300/25 bg-slate-950/80 px-3 py-2 text-[10px] leading-relaxed text-amber-100/90 backdrop-blur sm:bottom-3" role="status">Still educational illustration · capsule shown inside the reticulum. Use Animated 3D for the existing moving cow.</div>
+          </> : <>
           <Canvas
             shadows
             frameloop="always"
@@ -126,12 +142,13 @@ export function LiveSimulationPage({
               onAnimationReport={onAnimationReport}
             />
           </Canvas>
-          {cowAssetAvailable && !animationReport && !modelLoadFailed && <div className="absolute inset-x-4 top-4 rounded-xl border border-sky-300/30 bg-slate-950/85 p-3 text-sm text-sky-100" role="status">Loading the Holstein model and its animation clips…</div>}
-          {modelLoadFailed && <div className="absolute inset-x-4 top-4 rounded-xl border border-rose-300/30 bg-slate-950/90 p-3 text-sm text-rose-100" role="alert">The hosted cow model was found but could not be loaded.</div>}
+          {cowAssetAvailable && !animationReport && !modelLoadFailed && <div className="absolute inset-x-4 top-16 rounded-xl border border-sky-300/30 bg-slate-950/85 p-3 text-sm text-sky-100" role="status">Loading the Holstein model and its animation clips…</div>}
+          {modelLoadFailed && <div className="absolute inset-x-4 top-16 rounded-xl border border-rose-300/30 bg-slate-950/90 p-3 text-sm text-rose-100" role="alert">The hosted cow model was found but could not be loaded.</div>}
           {animationReport && <div className="absolute right-3 top-3 max-w-64 rounded-lg border border-slate-700/70 bg-slate-950/75 px-3 py-2 text-[10px] text-slate-300 backdrop-blur">Model clips: {animationReport.clipNames.join(', ') || 'none'}{animationReport.missingActivities.length > 0 ? ` · no dedicated ${animationReport.missingActivities.join(', ')} clips` : ''}</div>}
           <div className="absolute bottom-3 right-3 max-w-[min(340px,70%)] rounded-lg border border-amber-300/25 bg-slate-950/80 px-3 py-2 text-[10px] leading-relaxed text-amber-100/90 backdrop-blur" role="status">
             Four-compartment 3D anatomy is not installed. The external stomach overlay has been removed; no substitute anatomy is shown.
           </div>
+          </>}
           <div className="absolute bottom-3 left-3 rounded-lg border border-emerald-100/20 bg-slate-950/70 px-3 py-2 text-xs text-emerald-100 backdrop-blur">
             <span className="font-semibold">{cow.id}</span><span className="mx-2 text-slate-500">·</span>{cow.location}<span className="mx-2 text-slate-500">·</span>{cow.activity}
           </div>
