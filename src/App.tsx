@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, AlertTriangle, CloudSun, Pause, Play, Thermometer } from 'lucide-react';
+import { CapsuleDataNotice, CapsuleTroubleshootingPage } from './components/CapsuleTroubleshootingPage';
+import { BolusSimulationPage } from './components/BolusSimulationPage';
 import type { CowAnimationReport } from './components/CowPasture';
-import { FarmerDashboardPage, HealthAnalysisPage, LiveSimulationPage, ScannersPage } from './components/SimulationPages';
+import { FarmerDashboardPage, ScannersPage } from './components/SimulationPages';
 import {
   getCowHealthAnalysis,
   getLatestCowReading,
@@ -13,6 +15,7 @@ function App() {
   const {
     page,
     isPlaying,
+    speed,
     clock,
     selectedCowId,
     cows,
@@ -36,9 +39,9 @@ function App() {
 
   useEffect(() => {
     if (!isPlaying) return;
-    const timer = window.setInterval(advanceSimulation, 2200);
+    const timer = window.setInterval(advanceSimulation, 2200 / speed);
     return () => window.clearInterval(timer);
-  }, [advanceSimulation, isPlaying]);
+  }, [advanceSimulation, isPlaying, speed]);
 
   return (
     <div className="min-h-screen bg-[#07100e] text-slate-100">
@@ -88,7 +91,7 @@ function App() {
                     : 'border-transparent text-slate-400 hover:border-slate-700 hover:bg-slate-900 hover:text-slate-200'
                 }`}
               >
-                {item}
+                {item}{item === 'Capsule troubleshooting' && cows.some(cow => cow.capsule.status !== 'Online') && <span className="capsule-nav-count" aria-label={`${cows.filter(cow => cow.capsule.status !== 'Online').length} capsules not sending data`}>{cows.filter(cow => cow.capsule.status !== 'Online').length}</span>}
               </button>
             ))}
           </div>
@@ -96,15 +99,17 @@ function App() {
       </header>
 
       <main className="mx-auto max-w-[1680px] space-y-5 px-4 py-5 sm:px-6 sm:py-7">
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Shared live cow summary">
+        {page !== 'Live Cow Simulation' && <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Shared live cow summary">
           <SummaryMetric label="Selected cow" value={selectedCow.id} detail={`${selectedCow.location} · ${selectedCow.activity}`} icon={<CloudSun />} />
           <SummaryMetric label="Temperature" value={`${latest.temperatureC.toFixed(1)}°C`} detail={`Updated ${latest.time} SAST`} icon={<Thermometer />} />
           <SummaryMetric label="Movement index" value={latest.movementIndex.toFixed(2)} detail={`Rumen pH ${latest.ph.toFixed(2)} · simulated`} icon={<Activity />} />
           <SummaryMetric label="Rule-based risk" value={analysis.riskLevel} detail={`Simulation tick ${clock} · shared data`} icon={<AlertTriangle />} risk={analysis.riskLevel} />
-        </section>
+        </section>}
 
+        {page !== 'Capsule troubleshooting' && <CapsuleDataNotice cow={selectedCow} />}
+        {page === 'Capsule troubleshooting' && <CapsuleTroubleshootingPage />}
         {page === 'Live Cow Simulation' && (
-          <LiveSimulationPage
+          <BolusSimulationPage
             cow={selectedCow}
             cows={cows}
             cowAssetAvailable={!cowModelLoadFailed}
@@ -116,7 +121,6 @@ function App() {
           />
         )}
         {page === 'Scanners' && <ScannersPage cow={selectedCow} />}
-        {page === 'Smart Health Analysis Model' && <HealthAnalysisPage cows={cows} selectedCow={selectedCow} onSelectCow={selectCow} />}
         {page === 'Farmer Dashboard' && <FarmerDashboardPage cows={cows} selectedCow={selectedCow} onSelectCow={selectCow} />}
 
         <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-4 text-[10px] text-slate-500">

@@ -6,24 +6,35 @@ import { analyzeCowReadings, type CowHealthAnalysis } from '../services/herdHeal
 export const simulationPages = [
   'Live Cow Simulation',
   'Scanners',
-  'Smart Health Analysis Model',
   'Farmer Dashboard',
+  'Capsule troubleshooting',
 ] as const;
 
 export type SimulationPage = (typeof simulationPages)[number];
 
+export interface CapsuleDevice {
+  status: 'Online' | 'Offline' | 'Troubleshooting';
+  fault: 'link' | 'hardware' | null;
+  step: number;
+  attempt: number;
+  message: string;
+}
+export interface CapsuleRecovery { id: string; cowId: string; at: string; message: string; }
 export interface MonitoredCow {
   id: string;
   tag: string;
   location: string;
   activity: Activity;
   readings: SensorReading[];
+  capsule: CapsuleDevice;
   illnessStage: 'Normal' | 'Early warning' | 'Urgent veterinary warning';
 }
 
 interface SimulationState {
   page: SimulationPage;
   isPlaying: boolean;
+  speed: 1 | 2 | 5;
+  setSpeed: (speed: 1 | 2 | 5) => void;
   clock: number;
   selectedCowId: string;
   cows: MonitoredCow[];
@@ -31,6 +42,9 @@ interface SimulationState {
   setPlaying: (isPlaying: boolean) => void;
   selectCow: (cowId: string) => void;
   advanceSimulation: () => void;
+  capsuleEvents: CapsuleRecovery[];
+  simulateCapsuleFault: (cowId: string, fault: 'link' | 'hardware') => void;
+  startCapsuleTroubleshooting: (cowId: string) => void;
 }
 
 const cowSeeds = [
@@ -72,6 +86,12 @@ function makeInitialCows(): MonitoredCow[] {
     location: seed.location,
     activity: seed.activity,
     illnessStage: 'Normal',
+    capsule: {
+      status: seed.id === 'COW-002' || seed.id === 'COW-005' ? 'Offline' : 'Online',
+      fault: seed.id === 'COW-002' ? 'link' : seed.id === 'COW-005' ? 'hardware' : null,
+      step: 0, attempt: 0,
+      message: seed.id === 'COW-002' ? 'No data received. Start troubleshooting to restore the simulated link.' : seed.id === 'COW-005' ? 'No data received. A sensor self-test is needed.' : 'Capsule transmitting normally.',
+    },
     readings: Array.from({ length: 6 }, (_, index) => {
       const initialTick = index - 5;
       const temperatureOffset = Math.sin((index + cowIndex) * 0.8) * 0.12;
@@ -145,7 +165,7 @@ function addReading(cow: MonitoredCow, tick: number, timestamp: string): Monitor
       previous.movementIndex + Math.cos(phase * 0.55) * 0.045,
       previous.ph + Math.sin(phase * 0.45) * 0.025,
     );
-  const readings = [...cow.readings.slice(-59), reading];
+  const readings = [...cow.readings.slice(-59), { ...reading, id: previous.id + 1 }];
   const assessment = analyzeCowReadings(readings);
   const illnessStage = cow.id === 'COW-001' ? getStage(tick) : 'Normal';
   const activity = cow.id === 'COW-001' ? getAutomaticActivity(tick, illnessStage) : cow.activity;
@@ -166,6 +186,12 @@ export function getPreviousCowReading(cow: MonitoredCow): SensorReading {
 }
 
 function computeCowHealthAnalysis(cow: MonitoredCow): CowHealthAnalysis {
+  if (cow.capsule.status !== 'Online') return {
+    riskLevel: 'Monitoring', concern: 'Live health status unavailable · capsule not sending data',
+    action: 'Restore capsule transmission. Check the animal directly while readings are unavailable.',
+    explanation: 'Last received readings are retained for reference and are not fresh sensor data.',
+    reasons: ['Capsule transmission is interrupted.'],
+  };
   const assessment = analyzeCowReadings(cow.readings);
   if (cow.id !== 'COW-001' || cow.illnessStage === 'Normal') return assessment;
   return {
@@ -186,9 +212,41 @@ export function getCowHealthAnalysis(cow: MonitoredCow): CowHealthAnalysis {
 export const useSimulationStore = create<SimulationState>((set, get) => ({
   page: 'Live Cow Simulation',
   isPlaying: true,
+  speed: 1,
+  setSpeed: (speed) => set({ speed }),
   clock: 0,
   selectedCowId: 'COW-001',
   cows: makeInitialCows(),
+  capsuleEvents: [],
+  simulateCapsuleFault: (cowId, fault) => set(state => ({ cows: state.cows.map(cow => cow.id === cowId ? {
+    ...cow, capsule: { status: 'Offline', fault, step: 0, attempt: cow.capsule.attempt + 1,
+      message: 'Simulated data interruption. Run troubleshooting to check the capsule.' },
+  } : cow) })),
+  startCapsuleTroubleshooting: (cowId) => {
+    const cow = get().cows.find(item => item.id === cowId);
+    if (!cow || cow.capsule.status !== 'Offline') return;
+    const attempt = cow.capsule.attempt + 1;
+    set(state => ({ cows: state.cows.map(item => item.id === cowId ? {
+      ...item, capsule: { ...item.capsule, status: 'Troubleshooting', step: 0, attempt, message: 'Checking the farm gateway link…' },
+    } : item) }));
+    const update = (step: number, message: string) => set(state => ({ cows: state.cows.map(item =>
+      item.id === cowId && item.capsule.status === 'Troubleshooting' && item.capsule.attempt === attempt
+        ? { ...item, capsule: { ...item.capsule, step, message } } : item) }));
+    window.setTimeout(() => update(1, 'Gateway link checked. Requesting a capsule response…'), 1500);
+    window.setTimeout(() => update(2, 'Capsule responded. Verifying the sensor self-test and a fresh packet…'), 3500);
+    window.setTimeout(() => set(state => {
+      const item = state.cows.find(c => c.id === cowId);
+      if (!item || item.capsule.status !== 'Troubleshooting' || item.capsule.attempt !== attempt) return state;
+      if (item.capsule.fault === 'hardware') return { cows: state.cows.map(c => c.id === cowId ? {
+        ...c, capsule: { ...c.capsule, status: 'Offline', step: 2, message: 'Sensor self-test failed. Data is still unavailable. Arrange manual capsule inspection; retry after the fault is repaired.' },
+      } : c) };
+      const at = formatSouthAfricanTime(new Date());
+      const restored = addReading({ ...item, capsule: { status: 'Online', fault: null, step: 3, attempt, message: 'Fresh packet received. Transmission restored.' } }, state.clock, at);
+      return { cows: state.cows.map(c => c.id === cowId ? restored : c), capsuleEvents: [
+        { id: `${cowId}-${attempt}`, cowId, at, message: 'Fresh packet received; removed from the fault list' }, ...state.capsuleEvents,
+      ].slice(0, 10) };
+    }), 6000);
+  },
   setPage: (page) => set({ page }),
   setPlaying: (isPlaying) => set({ isPlaying }),
   selectCow: (selectedCowId) => set({ selectedCowId }),
@@ -198,7 +256,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     const timestamp = formatSouthAfricanTime(new Date());
     set({
       clock: tick,
-      cows: state.cows.map((cow) => addReading(cow, tick, timestamp)),
+      cows: state.cows.map((cow) => cow.capsule.status === 'Online' ? addReading(cow, tick, timestamp) : cow),
     });
   },
 }));

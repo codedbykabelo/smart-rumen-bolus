@@ -3,7 +3,6 @@ import type { Activity, AlertItem, CowProfile, ScenarioType } from '../types';
 export const appPages = [
   'Live Cow Simulation',
   'Scanners',
-  'Smart Health Analysis Model',
   'Farmer Dashboard',
 ] as const;
 

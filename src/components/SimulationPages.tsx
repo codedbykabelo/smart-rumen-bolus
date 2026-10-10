@@ -19,7 +19,7 @@ import {
   YAxis,
 } from 'recharts';
 import type { CowAnimationReport } from './CowPasture';
-import type { Activity as CowActivity, HealthStatus, SensorReading } from '../types';
+import type { Activity as CowActivity, HealthStatus } from '../types';
 import {
   getCowHealthAnalysis,
   getLatestCowReading,
@@ -34,12 +34,6 @@ const activities: CowActivity[] = ['Grazing', 'Walking', 'Drinking', 'Resting', 
 function formatReading(value: number, sensor: 'temperature' | 'movement' | 'ph'): string {
   if (sensor === 'temperature') return `${value.toFixed(1)}°C`;
   return sensor === 'ph' ? value.toFixed(2) : value.toFixed(2);
-}
-
-function getSensorValue(reading: SensorReading, sensor: 'temperature' | 'movement' | 'ph'): number {
-  if (sensor === 'temperature') return reading.temperatureC;
-  if (sensor === 'movement') return reading.movementIndex;
-  return reading.ph;
 }
 
 function getTrend(delta: number): { label: string; className: string; Icon: typeof ArrowRight } {
@@ -368,97 +362,6 @@ function TemperatureState({ value }: { value: number }) {
   return <span className={`mt-2 rounded-full border px-3 py-1 text-xs ${state[1]}`}>{state[0]}</span>;
 }
 
-const sensorRows = [
-  { key: 'temperature' as const, label: 'Temperature', unit: '°C' },
-  { key: 'movement' as const, label: 'Movement', unit: 'index' },
-  { key: 'ph' as const, label: 'Rumen pH', unit: 'pH' },
-];
-
-export function HealthAnalysisPage({
-  cows,
-  selectedCow,
-  onSelectCow,
-}: {
-  cows: MonitoredCow[];
-  selectedCow: MonitoredCow;
-  onSelectCow: (cowId: string) => void;
-}) {
-  const reading = getLatestCowReading(selectedCow);
-  const previous = getPreviousCowReading(selectedCow);
-  const analysis = getCowHealthAnalysis(selectedCow);
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="text-2xl font-semibold text-white">Smart Health Analysis Model</h2><p className="mt-1 text-sm text-slate-400">Explainable rule-based comparisons of actual simulated history—not a trained AI diagnosis.</p></div>
-        <SimulatedPill />
-      </div>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.65fr)]">
-        <Panel className="min-w-0">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div><h3 className="font-semibold text-white">Previous vs current sensor readings</h3><p className="text-xs text-slate-400">Each row compares successive timestamped records.</p></div>
-            <select value={selectedCow.id} onChange={(event) => onSelectCow(event.target.value)} aria-label="Select cow for health analysis" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
-              {cows.map((cow) => <option key={cow.id} value={cow.id}>{cow.id}</option>)}
-            </select>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[940px] border-collapse text-left text-xs">
-              <thead><tr className="border-b border-slate-700 text-[10px] uppercase tracking-wide text-slate-500">
-                <th className="px-2 py-3">Cow ID</th><th className="px-2 py-3">Sensor type</th><th className="px-2 py-3">Previous</th><th className="px-2 py-3">Current</th><th className="px-2 py-3">Difference</th><th className="px-2 py-3">Trend</th><th className="px-2 py-3">Risk level</th><th className="px-2 py-3">Possible health concern</th><th className="px-2 py-3">Recommended action</th>
-              </tr></thead>
-              <tbody>
-                {cows.flatMap((cow) => {
-                  const current = getLatestCowReading(cow);
-                  const prior = getPreviousCowReading(cow);
-                  const result = getCowHealthAnalysis(cow);
-                  return sensorRows.map((sensor) => {
-                    const diff = getSensorValue(current, sensor.key) - getSensorValue(prior, sensor.key);
-                    const trend = getTrend(diff);
-                    return <tr key={`${cow.id}-${sensor.key}`} className={`border-b border-slate-800/80 align-top ${cow.id === selectedCow.id ? 'bg-slate-800/25' : ''}`}>
-                      <td className="whitespace-nowrap px-2 py-3 font-semibold text-slate-200">{cow.id}</td>
-                      <td className="whitespace-nowrap px-2 py-3 text-slate-300">{sensor.label}</td>
-                      <td className="whitespace-nowrap px-2 py-3 text-slate-400">{formatReading(getSensorValue(prior, sensor.key), sensor.key)}</td>
-                      <td className="whitespace-nowrap px-2 py-3 font-semibold text-white">{formatReading(getSensorValue(current, sensor.key), sensor.key)}</td>
-                      <td className={`whitespace-nowrap px-2 py-3 ${trend.className}`}>{diff >= 0 ? '+' : ''}{diff.toFixed(sensor.key === 'ph' ? 2 : 2)} {sensor.unit}</td>
-                      <td className="whitespace-nowrap px-2 py-3"><TrendMark trend={trend} /></td>
-                      <td className="whitespace-nowrap px-2 py-3"><RiskBadge risk={result.riskLevel} /></td>
-                      <td className="max-w-56 px-2 py-3 leading-relaxed text-slate-400">{result.concern}</td>
-                      <td className="max-w-64 px-2 py-3 leading-relaxed text-slate-400">{result.action}</td>
-                    </tr>;
-                  });
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
-        <Panel>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-300">Rule-based interpretation</div>
-          <h3 className="mt-1 text-xl font-semibold text-white">{selectedCow.id} analysis</h3>
-          <div className="mt-3"><RiskBadge risk={analysis.riskLevel} /></div>
-          <p className="mt-3 text-sm font-medium text-slate-200">{analysis.concern}</p>
-          <p className="mt-2 text-sm leading-relaxed text-slate-400">{analysis.explanation}</p>
-          <div className="mt-4 rounded-xl border border-slate-700 bg-slate-950/60 p-3">
-            <div className="text-xs font-semibold text-slate-200">Why this warning was generated</div>
-            <ul className="mt-2 space-y-2">{analysis.reasons.map((reason) => <li key={reason} className="flex gap-2 text-xs leading-relaxed text-slate-400"><span className="text-amber-300">•</span>{reason}</li>)}</ul>
-            <div className="mt-3 border-t border-slate-800 pt-3 text-xs leading-relaxed text-slate-300">Current: {reading.temperatureC.toFixed(1)}°C temperature · {reading.movementIndex.toFixed(2)} movement · pH {reading.ph.toFixed(2)}. Previous sample: {previous.time}.</div>
-          </div>
-          <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/5 p-3 text-xs leading-relaxed text-amber-100/80">
-            FMD, heartwater, and redwater are possible veterinary differentials only when broader clinical context supports them. Temperature, movement, and pH cannot distinguish or confirm these diseases. Seek veterinary assessment.
-          </div>
-          <div className="mt-3 space-y-2">
-            <DifferentialScenario title="Foot-and-mouth disease" detail="Fever may accompany oral or foot lesions, drooling, and lameness; sensor readings alone are not specific." />
-            <DifferentialScenario title="Heartwater" detail="Fever with neurologic or respiratory signs and tick exposure needs prompt veterinary assessment." />
-            <DifferentialScenario title="Redwater" detail="Fever with dark urine, pale or yellow mucosa, or weakness warrants urgent veterinary examination." />
-          </div>
-        </Panel>
-      </div>
-    </div>
-  );
-}
-
-function DifferentialScenario({ title, detail }: { title: string; detail: string }) {
-  return <div className="rounded-lg border border-slate-700/80 bg-slate-950/45 p-2.5"><div className="text-xs font-semibold text-slate-200">{title}</div><div className="mt-1 text-[11px] leading-relaxed text-slate-400">{detail}</div></div>;
-}
-
 export function FarmerDashboardPage({
   cows,
   selectedCow,
@@ -498,7 +401,7 @@ export function FarmerDashboardPage({
               return <tr key={cow.id} className={`cursor-pointer border-b border-slate-800/70 transition hover:bg-slate-800/40 ${selectedCow.id === cow.id ? 'bg-emerald-400/5' : ''}`} onClick={() => onSelectCow(cow.id)} onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelectCow(cow.id); }
               }} tabIndex={0} aria-label={`Select ${cow.id}`}>
-                <td className="px-4 py-3 font-semibold text-white">{cow.id}<div className="text-[10px] font-normal text-slate-500">{cow.tag} · {cow.location}</div></td>
+                <td className="px-4 py-3 font-semibold text-white">{cow.id}<div className="text-[10px] font-normal text-slate-500">{cow.tag} · {cow.location}</div>{cow.capsule.status !== 'Online' && <span className="capsule-inline-state">{cow.capsule.status === 'Troubleshooting' ? 'Capsule troubleshooting…' : 'Capsule not sending data'}</span>}</td>
                 <td className="px-3 py-3 text-slate-200">{reading.temperatureC.toFixed(1)}°C</td>
                 <td className="px-3 py-3 text-slate-200">{reading.movementIndex.toFixed(2)}</td>
                 <td className="px-3 py-3 text-slate-200">{reading.ph.toFixed(2)}</td>
