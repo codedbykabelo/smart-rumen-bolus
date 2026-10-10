@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { formatSouthAfricanTime } from '../lib/time';
 import type { Activity, SensorReading } from '../types';
 import { analyzeCowReadings, type CowHealthAnalysis } from '../services/herdHealthAnalysis';
 
@@ -61,7 +62,7 @@ function makeReading(
 
 function initialTimestamp(minutesAgo: number): string {
   const time = new Date(Date.now() - minutesAgo * 60_000);
-  return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return formatSouthAfricanTime(time);
 }
 
 function makeInitialCows(): MonitoredCow[] {
@@ -164,7 +165,7 @@ export function getPreviousCowReading(cow: MonitoredCow): SensorReading {
   return cow.readings[cow.readings.length - 2] ?? getLatestCowReading(cow);
 }
 
-export function getCowHealthAnalysis(cow: MonitoredCow): CowHealthAnalysis {
+function computeCowHealthAnalysis(cow: MonitoredCow): CowHealthAnalysis {
   const assessment = analyzeCowReadings(cow.readings);
   if (cow.id !== 'COW-001' || cow.illnessStage === 'Normal') return assessment;
   return {
@@ -172,6 +173,14 @@ export function getCowHealthAnalysis(cow: MonitoredCow): CowHealthAnalysis {
     concern: `${assessment.concern} · suspected-FMD demonstration scenario`,
     explanation: `This is the staged simulated suspected-FMD demonstration. ${assessment.explanation} These nonspecific signals do not confirm FMD.`,
   };
+}
+
+// Immutable cow records change only when a new reading arrives; old entries are GC eligible.
+const assessmentCache = new WeakMap<MonitoredCow, CowHealthAnalysis>();
+export function getCowHealthAnalysis(cow: MonitoredCow): CowHealthAnalysis {
+  let result = assessmentCache.get(cow);
+  if (!result) { result = computeCowHealthAnalysis(cow); assessmentCache.set(cow, result); }
+  return result;
 }
 
 export const useSimulationStore = create<SimulationState>((set, get) => ({
@@ -186,7 +195,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   advanceSimulation: () => {
     const state = get();
     const tick = state.clock + 1;
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const timestamp = formatSouthAfricanTime(new Date());
     set({
       clock: tick,
       cows: state.cows.map((cow) => addReading(cow, tick, timestamp)),

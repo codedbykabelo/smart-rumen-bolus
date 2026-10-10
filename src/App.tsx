@@ -98,7 +98,7 @@ function App() {
       <main className="mx-auto max-w-[1680px] space-y-5 px-4 py-5 sm:px-6 sm:py-7">
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Shared live cow summary">
           <SummaryMetric label="Selected cow" value={selectedCow.id} detail={`${selectedCow.location} · ${selectedCow.activity}`} icon={<CloudSun />} />
-          <SummaryMetric label="Temperature" value={`${latest.temperatureC.toFixed(1)}°C`} detail={`Updated ${latest.time}`} icon={<Thermometer />} />
+          <SummaryMetric label="Temperature" value={`${latest.temperatureC.toFixed(1)}°C`} detail={`Updated ${latest.time} SAST`} icon={<Thermometer />} />
           <SummaryMetric label="Movement index" value={latest.movementIndex.toFixed(2)} detail={`Rumen pH ${latest.ph.toFixed(2)} · simulated`} icon={<Activity />} />
           <SummaryMetric label="Rule-based risk" value={analysis.riskLevel} detail={`Simulation tick ${clock} · shared data`} icon={<AlertTriangle />} risk={analysis.riskLevel} />
         </section>

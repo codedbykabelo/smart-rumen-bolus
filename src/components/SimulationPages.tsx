@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { CowPicture } from './CowPicture';
 import {
   Activity,
@@ -18,8 +18,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Canvas } from '@react-three/fiber';
-import { CowPasture } from './CowPasture';
 import type { CowAnimationReport } from './CowPasture';
 import type { Activity as CowActivity, HealthStatus, SensorReading } from '../types';
 import {
@@ -28,6 +26,8 @@ import {
   getPreviousCowReading,
   type MonitoredCow,
 } from '../store/useSimulationStore';
+
+const CowScene = lazy(() => import('./CowScene'));
 
 const activities: CowActivity[] = ['Grazing', 'Walking', 'Drinking', 'Resting', 'Looking around'];
 
@@ -125,25 +125,14 @@ export function LiveSimulationPage({
             </label>
             <div className="absolute bottom-12 right-3 max-w-[min(340px,70%)] rounded-lg border border-amber-300/25 bg-slate-950/80 px-3 py-2 text-[10px] leading-relaxed text-amber-100/90 backdrop-blur sm:bottom-3" role="status">Still educational illustration · capsule shown inside the reticulum. Use Animated 3D for the existing moving cow.</div>
           </> : <>
-          <Canvas
-            shadows
-            frameloop="always"
-            dpr={[1, 1.15]}
-            camera={{ position: [0, 2.9, 7.4], fov: 38, near: 0.1, far: 60 }}
-            gl={{ powerPreference: 'low-power', antialias: false }}
-          >
-            <CowPasture
-              cowAssetAvailable={cowAssetAvailable}
-              onCowModelError={onCowModelError}
-              xRayView={false}
-              activity={cow.activity}
-              illnessStage={cow.illnessStage}
-              isInspectingBolus={false}
-              onAnimationReport={onAnimationReport}
-            />
-          </Canvas>
+          <Suspense fallback={<CowPicture transparentStomach={transparentStomach} />}>
+            <CowScene cowAssetAvailable={cowAssetAvailable} onCowModelError={onCowModelError}
+              xRayView={false} activity={cow.activity} illnessStage={cow.illnessStage}
+              isInspectingBolus={false} onAnimationReport={onAnimationReport} />
+          </Suspense>
+          {!animationReport && !modelLoadFailed && <div className="pointer-events-none absolute inset-0"><CowPicture transparentStomach={transparentStomach} /></div>}
           {cowAssetAvailable && !animationReport && !modelLoadFailed && <div className="absolute inset-x-4 top-16 rounded-xl border border-sky-300/30 bg-slate-950/85 p-3 text-sm text-sky-100" role="status">Loading the Holstein model and its animation clips…</div>}
-          {modelLoadFailed && <div className="absolute inset-x-4 top-16 rounded-xl border border-rose-300/30 bg-slate-950/90 p-3 text-sm text-rose-100" role="alert">The hosted cow model was found but could not be loaded.</div>}
+          {modelLoadFailed && <div className="absolute inset-x-4 top-16 rounded-xl border border-rose-300/30 bg-slate-950/90 p-3 text-sm text-rose-100" role="alert">The cow model could not be loaded. Use Realistic picture to continue.</div>}
           {animationReport && <div className="absolute right-3 top-3 max-w-64 rounded-lg border border-slate-700/70 bg-slate-950/75 px-3 py-2 text-[10px] text-slate-300 backdrop-blur">Model clips: {animationReport.clipNames.join(', ') || 'none'}{animationReport.missingActivities.length > 0 ? ` · no dedicated ${animationReport.missingActivities.join(', ')} clips` : ''}</div>}
           <div className="absolute bottom-3 right-3 max-w-[min(340px,70%)] rounded-lg border border-amber-300/25 bg-slate-950/80 px-3 py-2 text-[10px] leading-relaxed text-amber-100/90 backdrop-blur" role="status">
             Four-compartment 3D anatomy is not installed. The external stomach overlay has been removed; no substitute anatomy is shown.
@@ -295,7 +284,7 @@ export function ScannersPage({ cow }: { cow: MonitoredCow }) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="text-2xl font-semibold text-white">Sensor Scanners</h2><p className="mt-1 text-sm text-slate-400">Live simulated signals for <strong className="text-slate-200">{cow.id}</strong> · last sample {current.time}</p></div>
+        <div><h2 className="text-2xl font-semibold text-white">Sensor Scanners</h2><p className="mt-1 text-sm text-slate-400">Live simulated signals for <strong className="text-slate-200">{cow.id}</strong> · last sample {current.time} SAST</p></div>
         <SimulatedPill />
       </div>
       <div className="grid gap-4 xl:grid-cols-3">

@@ -370,9 +370,9 @@ function Ground() {
 function Pasture() {
   const grass = useRef<import('three').InstancedMesh>(null);
   const [texture, roughnessMap, normalMap] = useTexture([
-    '/textures/leafy_grass_diff_1k.jpg',
-    '/textures/leafy_grass_rough_1k.jpg',
-    '/textures/leafy_grass_nor_gl_1k.jpg',
+    '/textures/leafy_grass_diff_1k.webp',
+    '/textures/leafy_grass_rough_1k.webp',
+    '/textures/leafy_grass_nor_gl_1k.webp',
   ]);
   texture.colorSpace = SRGBColorSpace;
   texture.anisotropy = 4;
